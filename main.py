@@ -97,7 +97,8 @@ def handle_message(message):
     role = user_role.get(user_id)
 
     if role == "creator":
-        bot.send_message(message.chat.id, '⏳ Проект в обработке, подождите 20–30 секунд...')prompt = generate_prompt(lang, role) + "\n\n" + message.text
+        bot.send_message(message.chat.id, '⏳ Проект в обработке, подождите 20–30 секунд...')
+        prompt = generate_prompt(lang, role) + "\n\n" + message.text
         reply = ask_openrouter(prompt)
         bot.send_message(message.chat.id, reply)
     else:
