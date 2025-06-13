@@ -1,71 +1,83 @@
 import os
+from flask import Flask, request
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# Токен бота
-TOKEN = os.getenv("BOT_TOKEN") 
+TOKEN = os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN)
 
-# Храним язык пользователя
-user_lang = {}
+app = Flask(__name__)
 
-# Команда /start
-@bot.message_handler(commands=['start'])
+# Хранилище языков и ролей
+user_lang = {}
+user_role = {}
+
+# Главная команда
+@bot.message_handler(commands=["start"])
 def send_welcome(message):
-    markup = InlineKeyboardMarkup(row_width=2)
-    btn1 = InlineKeyboardButton("Қазақша 🇰🇿", callback_data="lang_kz")
-    btn2 = InlineKeyboardButton("Русский 🇷🇺", callback_data="lang_ru")
-    markup.add(btn1, btn2)
+    markup = InlineKeyboardMarkup()
+    markup.row_width = 2
+    markup.add(
+        InlineKeyboardButton("Қазақша 🇰🇿", callback_data="lang_kz"),
+        InlineKeyboardButton("Русский 🇷🇺", callback_data="lang_ru")
+    )
     bot.send_message(message.chat.id, "Тілді таңдаңыз / Выберите язык / Choose a language:", reply_markup=markup)
 
-# Обработка выбора языка
-@bot.callback_query_handler(func=lambda call: call.data in ["lang_kz", "lang_ru"])
-def handle_language_selection(call):
-    lang = call.data.split("_")[1]  # "kz" или "ru"
-    user_lang[call.message.chat.id] = lang
-
+# Выбор языка
+@bot.callback_query_handler(func=lambda call: call.data.startswith("lang_"))
+def handle_language(call):
+    lang = call.data.split("_")[1]
+    user_lang[call.from_user.id] = lang
     if lang == "ru":
-        bot.send_message(call.message.chat.id, "Вы выбрали русский язык. Кто вы?", reply_markup=role_keyboard("ru"))
-    else:
-        bot.send_message(call.message.chat.id, "Сіз қазақ тілін таңдадыңыз. Сіз кімсіз?", reply_markup=role_keyboard("kz"))
-
-# Клавиатура с ролями
-def role_keyboard(lang):
-    markup = InlineKeyboardMarkup(row_width=1)
-    if lang == "ru":
+        msg = "Вы выбрали русский язык. Кто вы?"
+        markup = InlineKeyboardMarkup()
         markup.add(
             InlineKeyboardButton("Создатель проекта", callback_data="role_creator"),
             InlineKeyboardButton("Преподаватель", callback_data="role_teacher"),
             InlineKeyboardButton("Жюри", callback_data="role_jury")
         )
     else:
+        msg = "Сіз қазақ тілін таңдадыңыз. Сіз кімсіз?"
+        markup = InlineKeyboardMarkup()
         markup.add(
             InlineKeyboardButton("Жоба авторы", callback_data="role_creator"),
             InlineKeyboardButton("Мұғалім", callback_data="role_teacher"),
             InlineKeyboardButton("Қазылар", callback_data="role_jury")
         )
-    return markup
+    bot.edit_message_text(msg, call.message.chat.id, call.message.message_id, reply_markup=markup)
 
-# Обработка выбора роли
+# Выбор роли
 @bot.callback_query_handler(func=lambda call: call.data.startswith("role_"))
-def handle_role_selection(call):
+def handle_role(call):
     role = call.data.split("_")[1]
-    lang = user_lang.get(call.message.chat.id, "ru")
+    lang = user_lang.get(call.from_user.id, "ru")
+    user_role[call.from_user.id] = role
 
     if lang == "ru":
         if role == "creator":
-            bot.send_message(call.message.chat.id, "🔍 Введите описание проекта, я проанализирую его на юридические риски.")
+            bot.send_message(call.message.chat.id, "🧠 Расскажи о своём проекте, и я подскажу правовые риски!")
         elif role == "teacher":
-            bot.send_message(call.message.chat.id, "📚 Я помогу вам ориентироваться в Кодексах РК для преподавания.")
+            bot.send_message(call.message.chat.id, "📚 Я помогу вам сориентироваться в Кодексах РК для преподавания.")
         elif role == "jury":
-            bot.send_message(call.message.chat.id, "🧑‍⚖️ Я подскажу, какие юридические вопросы можно задать участникам.")
+            bot.send_message(call.message.chat.id, "⚖️ Я помогу задать юридические вопросы участникам.")
     else:
         if role == "creator":
-            bot.send_message(call.message.chat.id, "🔍 Жобаны сипаттаңыз, мен оны құқықтық тәуекелдерге талдаймын.")
+            bot.send_message(call.message.chat.id, "🧠 Жобаңызды сипаттаңыз, мен заңдық тәуекелдерді айтамын!")
         elif role == "teacher":
-            bot.send_message(call.message.chat.id, "📚 Мен ҚР кодекстерімен жұмыс істеуге көмектесемін.")
+            bot.send_message(call.message.chat.id, "📚 Мен оқыту үшін ҚР кодекстерін түсіндіруге көмектесемін.")
         elif role == "jury":
-            bot.send_message(call.message.chat.id, "🧑‍⚖️ Мен жобаларға қоятын құқықтық сұрақтарды ұсынамын.")
+            bot.send_message(call.message.chat.id, "⚖️ Мен қатысушыларға қоятын заң сұрақтарын ұсынамын.")
 
-# Запуск бота
-bot.polling()
+# Webhook
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    json_str = request.get_data().decode("utf-8")
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_updates([update])
+    return "!", 200
+
+# Flask run
+if name == "__main__":
+    bot.remove_webhook()
+    bot.set_webhook(url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}")
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
