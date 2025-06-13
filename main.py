@@ -2,37 +2,68 @@ import os
 import telebot
 from telebot import types
 
-TOKEN = "8084945590:AAFpLPZes86ClO1NLNOUakPlM6OFZJFNxAo"
+import os
+TOKEN = os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN)
 
 user_lang = {}  # Словарь для хранения выбранного языка по user_id
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    btn1 = types.KeyboardButton("Русский")
-    btn2 = types.KeyboardButton("Қазақша")
+    markup = InlineKeyboardMarkup(row_width=2)
+    btn1 = InlineKeyboardButton("Қазақша 🇰🇿", callback_data="lang_kz")
+    btn2 = InlineKeyboardButton("Русский 🇷🇺", callback_data="lang_ru")
     markup.add(btn1, btn2)
-    bot.send_message(message.chat.id, "Выберите язык / Тілді таңдаңыз:", reply_markup=markup)
+    bot.send_message(message.chat.id, "Тілді таңдаңыз / Выберите язык / Choose a language:", reply_markup=markup)
 
-@bot.message_handler(func=lambda message: message.text in ["Русский", "Қазақша"])
-def set_language(message):
-    user_lang[message.chat.id] = message.text
-    lang = message.text
+# Обработка выбора языка
+@bot.callback_query_handler(func=lambda call: call.data in ["lang_kz", "lang_ru"])
+def handle_language_selection(call):
+    lang = call.data.split("_")[1]  # "kz" или "ru"
+    user_lang[call.message.chat.id] = lang
 
-    if lang == "Русский":
-        bot.send_message(message.chat.id, "Вы выбрали русский язык. Кто вы?",
-                         reply_markup=role_keyboard("ru"))
-    else:
-        bot.send_message(message.chat.id, "Сіз қазақ тілін таңдадыңыз. Сіз кімсіз?",
-                         reply_markup=role_keyboard("kz"))
-
-def role_keyboard(lang):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     if lang == "ru":
-        markup.add("Создатель проекта", "Преподаватель", "Жюри")
+        bot.send_message(call.message.chat.id, "Вы выбрали русский язык. Кто вы?", reply_markup=role_keyboard("ru"))
     else:
-        markup.add("Жоба авторы", "Мұғалім", "Қазылар")
+        bot.send_message(call.message.chat.id, "Сіз қазақ тілін таңдадыңыз. Сіз кімсіз?", reply_markup=role_keyboard("kz"))
+
+# Клавиатура с ролями
+def role_keyboard(lang):
+    markup = InlineKeyboardMarkup(row_width=1)
+    if lang == "ru":
+        markup.add(
+            InlineKeyboardButton("Создатель проекта", callback_data="role_creator"),
+            InlineKeyboardButton("Преподаватель", callback_data="role_teacher"),
+            InlineKeyboardButton("Жюри", callback_data="role_jury")
+        )
+    else:
+        markup.add(
+            InlineKeyboardButton("Жоба авторы", callback_data="role_creator"),
+            InlineKeyboardButton("Мұғалім", callback_data="role_teacher"),
+            InlineKeyboardButton("Қазылар", callback_data="role_jury")
+        )
     return markup
 
+# Обработка выбора роли
+@bot.callback_query_handler(func=lambda call: call.data.startswith("role_"))
+def handle_role_selection(call):
+    role = call.data.split("_")[1]
+    lang = user_lang.get(call.message.chat.id, "ru")
+
+    if lang == "ru":
+        if role == "creator":
+            bot.send_message(call.message.chat.id, "🔍 Введите описание проекта, я проанализирую его на юридические риски.")
+        elif role == "teacher":
+            bot.send_message(call.message.chat.id, "📚 Я помогу вам ориентироваться в Кодексах РК для преподавания.")
+        elif role == "jury":
+            bot.send_message(call.message.chat.id, "🧑‍⚖️ Я подскажу, какие юридические вопросы можно задать участникам.")
+    else:
+        if role == "creator":
+            bot.send_message(call.message.chat.id, "🔍 Жобаны сипаттаңыз, мен оны құқықтық тәуекелдерге талдаймын.")
+        elif role == "teacher":
+            bot.send_message(call.message.chat.id, "📚 Мен ҚР кодекстерімен жұмыс істеуге көмектесемін.")
+        elif role == "jury":
+            bot.send_message(call.message.chat.id, "🧑‍⚖️ Мен жобаларға қоятын құқықтық сұрақтарды ұсынамын.")
+
+# Запуск бота
 bot.polling()
