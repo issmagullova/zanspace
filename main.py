@@ -6,7 +6,7 @@ import requests
 
 TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-MODEL = "openchat/openchat-7b"
+MODEL = os.getenv("OPENROUTER_MODEL")
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
@@ -129,6 +129,7 @@ def ask_openrouter(prompt):
     try:
         r = requests.post("https://openrouter.ai/api/v1/chat/completions", json=data, headers=headers)
         response = r.json()
+        print("DEBUG:", response)  # ← вот сюда вставь
         return response["choices"][0]["message"]["content"]
     except Exception as e:
         return f"⚠️ Ошибка при подключении к ИИ: {e}"
