@@ -4,10 +4,9 @@ from flask import Flask, request
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# Получаем токены из переменных окружения
+# Переменные окружения
 TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-MODEL = "openchat/openchat-7b"
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
@@ -16,7 +15,7 @@ app = Flask(__name__)
 user_lang = {}
 user_role = {}
 
-# Старт
+# Команда /start
 @bot.message_handler(commands=["start"])
 def send_welcome(message):
     markup = InlineKeyboardMarkup(row_width=2)
@@ -24,7 +23,7 @@ def send_welcome(message):
         InlineKeyboardButton("Қазақша 🇰🇿", callback_data="lang_kz"),
         InlineKeyboardButton("Русский 🇷🇺", callback_data="lang_ru")
     )
-    bot.send_message(message.chat.id, "Тілді таңдаңыз / Выберите язык / Choose a language:", reply_markup=markup)
+    bot.send_message(message.chat.id, "Тілді таңдаңыз / Выберите язык:", reply_markup=markup)
 
 # Выбор языка
 @bot.callback_query_handler(func=lambda call: call.data.startswith("lang_"))
@@ -34,7 +33,7 @@ def handle_language(call):
 
     if lang == "ru":
         msg = "Вы выбрали русский язык. Кто вы?"
-        markup = InlineKeyboardMarkup(row_width=1)
+        markup = InlineKeyboardMarkup()
         markup.add(
             InlineKeyboardButton("Создатель проекта", callback_data="role_creator"),
             InlineKeyboardButton("Преподаватель", callback_data="role_teacher"),
@@ -42,22 +41,20 @@ def handle_language(call):
         )
     else:
         msg = "Сіз қазақ тілін таңдадыңыз. Сіз кімсіз?"
-        markup = InlineKeyboardMarkup(row_width=1)
+        markup = InlineKeyboardMarkup()
         markup.add(
             InlineKeyboardButton("Жоба авторы", callback_data="role_creator"),
             InlineKeyboardButton("Мұғалім", callback_data="role_teacher"),
             InlineKeyboardButton("Қазылар", callback_data="role_jury")
         )
-
     bot.edit_message_text(msg, call.message.chat.id, call.message.message_id, reply_markup=markup)
 
 # Выбор роли
 @bot.callback_query_handler(func=lambda call: call.data.startswith("role_"))
 def handle_role(call):
     role = call.data.split("_")[1]
-    user_id = call.from_user.id
-    lang = user_lang.get(user_id, "ru")
-    user_role[user_id] = role
+    lang = user_lang.get(call.from_user.id, "ru")
+    user_role[call.from_user.id] = role
 
     if lang == "ru":
         if role == "creator":
@@ -74,8 +71,27 @@ def handle_role(call):
         elif role == "jury":
             bot.send_message(call.message.chat.id, "⚖️ Мен қатысушыларға қоятын заң сұрақтарын ұсынамын.")
 
-# Обработка сообщений
-@bot.message_handler(func=lambda message: True)
+# Генерация промпта
+def generate_prompt(lang, role):
+    if lang == "ru":
+        if role == "creator":
+            return "Ты 🧠 ИИ-юрист. Определи юридические риски проекта:"
+        elif role == "teacher":
+            return "Ты 📚 помощник преподавателя по бизнес-праву."
+        elif role == "jury":
+            return "Ты ⚖️ эксперт по стартапам. Оцени юридические аспекты проекта."
+    else:
+        if role == "creator":
+            return "Сіз 🧠 жасанды интеллект заңгерісіз. Жобадағы заңдық тәуекелдерді анықтаңыз:"
+        elif role == "teacher":
+            return "Сіз 📚 бизнес құқығы пәнінің мұғаліміне көмекшісіз."
+        elif role == "jury":
+            return "Сіз ⚖️ Стартап сарапшысысыз. Жобаның заңдылығын бағалаңыз."
+
+    return "Помоги с правовой оценкой проекта."
+
+# Обработка текстов (только для создателей)
+@bot.message_handler(func=lambda message: True, content_types=["text"])
 def handle_message(message):
     user_id = message.from_user.id
     lang = user_lang.get(user_id, "ru")
@@ -88,25 +104,7 @@ def handle_message(message):
     else:
         bot.send_message(message.chat.id, "⚠️ Эта функция сейчас доступна только для создателей проекта.")
 
-# Генерация промпта
-def generate_prompt(lang, role):
-    if lang == "ru":
-        if role == "creator":
-            return "Ты 👨‍⚖️ ИИ-юрист. Определи юридические риски проекта."
-        elif role == "teacher":
-            return "Ты 👩‍🏫 помощник преподавателя по бизнес-праву."
-        elif role == "jury":
-            return "Ты 👨‍⚖️ эксперт по стартапам. Быстро оцени легальность идеи."
-    else:
-        if role == "creator":
-            return "Сіз 🤖 жасанды интеллект заңгерісіз. Жобадағы тәуекелдерді анықтаңыз."
-        elif role == "teacher":return "Сіз 📚 бизнес құқығы пәнінің мұғаліміне көмекшісіз."
-        elif role == "jury":
-            return "Сіз ⚖️ Стартап сарапшысысыз. Жобаның заңдылығын бағалаңыз."
-
-    return "Помоги с правовой оценкой проекта."
-
-# Запрос в OpenRouter
+# Подключение к OpenRouter (mistral-7b-instruct)
 def ask_openrouter(prompt):
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -114,7 +112,7 @@ def ask_openrouter(prompt):
         "Content-Type": "application/json"
     }
     data = {
-        "model": MODEL,
+        "model": "mistralai/mistral-7b-instruct",
         "messages": [{"role": "user", "content": prompt}]
     }
 
@@ -126,7 +124,7 @@ def ask_openrouter(prompt):
     except Exception as e:
         return f"⚠️ Ошибка при подключении к ИИ: {e}"
 
-# Webhook
+# Webhook для Render
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     json_str = request.get_data().decode("utf-8")
