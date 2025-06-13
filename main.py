@@ -11,7 +11,7 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-# Память пользователей
+# Хранилище состояний
 user_lang = {}
 user_role = {}
 
@@ -25,7 +25,7 @@ def send_welcome(message):
     )
     bot.send_message(message.chat.id, "Тілді таңдаңыз / Выберите язык:", reply_markup=markup)
 
-# Выбор языка
+# Обработка выбора языка
 @bot.callback_query_handler(func=lambda call: call.data.startswith("lang_"))
 def handle_language(call):
     lang = call.data.split("_")[1]
@@ -49,7 +49,7 @@ def handle_language(call):
         )
     bot.edit_message_text(msg, call.message.chat.id, call.message.message_id, reply_markup=markup)
 
-# Выбор роли
+# Обработка выбора роли
 @bot.callback_query_handler(func=lambda call: call.data.startswith("role_"))
 def handle_role(call):
     role = call.data.split("_")[1]
@@ -75,22 +75,21 @@ def handle_role(call):
 def generate_prompt(lang, role):
     if lang == "ru":
         if role == "creator":
-            return "Ты 🧠 ИИ-юрист. Определи юридические риски проекта:"
-        elif role == "teacher":
-            return "Ты 📚 помощник преподавателя по бизнес-праву."
-        elif role == "jury":
-            return "Ты ⚖️ эксперт по стартапам. Оцени юридические аспекты проекта."
+            return (
+                "Ты — ИИ-юрист, который оценивает стартапы с учётом законодательства Казахстана. "
+                "Проанализируй проект ниже и определи юридические риски, возможные пробелы в документации, "
+                "а также дай рекомендации для легализации:"
+            )
     else:
         if role == "creator":
-            return "Сіз 🧠 жасанды интеллект заңгерісіз. Жобадағы заңдық тәуекелдерді анықтаңыз:"
-        elif role == "teacher":
-            return "Сіз 📚 бизнес құқығы пәнінің мұғаліміне көмекшісіз."
-        elif role == "jury":
-            return "Сіз ⚖️ Стартап сарапшысысыз. Жобаның заңдылығын бағалаңыз."
+            return (
+                "Сіз — Қазақстан заңнамасын білетін жасанды интеллект заңгерісіз. "
+                "Жобаны төменде талдап, заңды тәуекелдерді анықтаңыз, құжаттардағы кемшіліктерді көрсетіңіз "
+                "және заңдастыру бойынша ұсыныстар беріңіз:"
+            )
+    return "Анализируй проект с учётом законодательства Казахстана."
 
-    return "Помоги с правовой оценкой проекта."
-
-# Обработка текстов (только для создателей)
+# Обработка текстов
 @bot.message_handler(func=lambda message: True, content_types=["text"])
 def handle_message(message):
     user_id = message.from_user.id
@@ -98,13 +97,13 @@ def handle_message(message):
     role = user_role.get(user_id)
 
     if role == "creator":
-        prompt = generate_prompt(lang, role) + "\n\n" + message.text
+        bot.send_message(message.chat.id, "⏳ Проект в обработке, подождите 20–30 секунд...")prompt = generate_prompt(lang, role) + "\n\n" + message.text
         reply = ask_openrouter(prompt)
         bot.send_message(message.chat.id, reply)
     else:
         bot.send_message(message.chat.id, "⚠️ Эта функция сейчас доступна только для создателей проекта.")
 
-# Подключение к OpenRouter (mistral-7b-instruct)
+# Запрос в OpenRouter (модель Mistral)
 def ask_openrouter(prompt):
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
