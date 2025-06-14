@@ -102,7 +102,7 @@ def ask_openrouter(prompt):
         "Content-Type": "application/json"
     }
     data = {
-        "model": "deepseek-ai/deepseek-r1-0528:free",
+        "model": "deepseek/deepseek-r1-0528:free",
         "messages": [{"role": "user", "content": prompt}]
     }
 
