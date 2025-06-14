@@ -106,16 +106,16 @@ def ask_openrouter(prompt):
         "messages": [{"role": "user", "content": prompt}]
     }
 
-   try:
-    r = requests.post("https://openrouter.ai/api/v1/chat/completions", json=data, headers=headers)
-    response = r.json()
-    print("DEBUG:", response)
-    if "choices" in response:
-        return response["choices"][0]["message"]["content"]
-    else:
-        return f"⚠️ Ошибка: модель не вернула ответ. Ответ API: {response}"
-except Exception as e:
-    return f"⚠️ Ошибка при подключении к ИИ: {e}"
+    try:
+        r = requests.post("https://openrouter.ai/api/v1/chat/completions", json=data, headers=headers)
+        response = r.json()
+        print("DEBUG:", response)
+        if "choices" in response:
+            return response["choices"][0]["message"]["content"]
+        else:
+            return f"⚠️ Ошибка: модель не вернула ответ. Ответ API: {response}"
+    except Exception as e:
+        return f"⚠️ Ошибка при подключении к ИИ: {e}"
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
