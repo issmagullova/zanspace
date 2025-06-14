@@ -25,7 +25,7 @@ def send_welcome(message):
     )
     bot.send_message(message.chat.id, "Тілді таңдаңыз / Выберите язык:", reply_markup=markup)
 
-# Обработка выбора языка
+# Обработка языка
 @bot.callback_query_handler(func=lambda call: call.data.startswith("lang_"))
 def handle_language(call):
     lang = call.data.split("_")[1]
@@ -49,7 +49,7 @@ def handle_language(call):
         )
     bot.edit_message_text(msg, call.message.chat.id, call.message.message_id, reply_markup=markup)
 
-# Обработка выбора роли
+# Обработка роли
 @bot.callback_query_handler(func=lambda call: call.data.startswith("role_"))
 def handle_role(call):
     role = call.data.split("_")[1]
@@ -70,41 +70,23 @@ def handle_role(call):
             bot.send_message(call.message.chat.id, "📚 Мен оқыту үшін ҚР кодекстерін түсіндіруге көмектесемін.")
         elif role == "jury":
             bot.send_message(call.message.chat.id, "⚖️ Мен қатысушыларға қоятын заң сұрақтарын ұсынамын.")
+
 # Генерация промпта
 def generate_prompt(lang, role):
     if lang == "ru" and role == "creator":
         return (
-            "Ты — ИИ-юрист, оценивающий стартапы с учётом законодательства Казахстана. "
-            "ВНИМАНИЕ: твой ответ является лишь направляющим, он не является официальной юридической консультацией. "
-            "Анализируй следующий проект и определи:\n"
-            "- юридические риски;\n"
-            "- пробелы в документации;\n"
-            "- что нужно сделать для легализации в Республике Казахстан.\n"
-            "Проект:"
+            "Ты — ИИ-юрист, специализирующийся на казахстанском законодательстве. "
+            "Проанализируй стартап, определи возможные юридические риски, пробелы в документации, "
+            "и дай рекомендации. ❗️Важно: это не юридическая консультация, а направляющий анализ. "
+            "Проект: "
         )
-    return "Ответь на основе законодательства Казахстана."
+    return "Помоги с анализом проекта по законодательству Казахстана."
 
-# Обработка текстов
-@bot.message_handler(func=lambda message: True, content_types=["text"])
-def handle_message(message):
-    user_id = message.from_user.id
-    lang = user_lang.get(user_id, "ru")
-    role = user_role.get(user_id)
-
-    if role == "creator":
-        bot.send_message(message.chat.id, "⏳ Проект в обработке, подождите 20–30 секунд...")
-
-        prompt = generate_prompt(lang, role) + "\n\n" + message.text
-        reply = ask_openrouter(prompt)
-        bot.send_message(message.chat.id, reply)
-    else:
-        bot.send_message(message.chat.id, "⚠️ Эта функция сейчас доступна только для создателей проекта.")
-
-# Запрос в OpenRouter с моделью Google Gemma
+# Ответ от OpenRouter
 def ask_openrouter(prompt):
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "HTTP-Referer": "https://openrouter.ai",  # обязателен
+        "HTTP-Referer": "https://openrouter.ai",
         "Content-Type": "application/json"
     }
     data = {
@@ -115,10 +97,24 @@ def ask_openrouter(prompt):
     try:
         r = requests.post("https://openrouter.ai/api/v1/chat/completions", json=data, headers=headers)
         response = r.json()
-        print("DEBUG:", response)  # для отладки
+        print("DEBUG:", response)
         return response["choices"][0]["message"]["content"]
     except Exception as e:
         return f"⚠️ Ошибка при подключении к ИИ: {e}"
+# Обработка текста от пользователя
+@bot.message_handler(func=lambda message: True, content_types=["text"])
+def handle_message(message):
+    user_id = message.from_user.id
+    lang = user_lang.get(user_id, "ru")
+    role = user_role.get(user_id)
+
+    if role == "creator" and lang == "ru":
+        bot.send_message(message.chat.id, "⏳ Проект в обработке, подождите 20–30 секунд...")
+        prompt = generate_prompt(lang, role) + "\n\n" + message.text
+        reply = ask_openrouter(prompt)
+        bot.send_message(message.chat.id, reply)
+    else:
+        bot.send_message(message.chat.id, "⚠️ Эта функция сейчас доступна только для создателей проекта на русском языке.")
 
 # Webhook для Render
 @app.route(f"/{TOKEN}", methods=["POST"])
@@ -128,7 +124,7 @@ def webhook():
     bot.process_new_updates([update])
     return "!", 200
 
-# Запуск Flask на Render
+# Запуск Flask
 if __name__ == "__main__":
     bot.remove_webhook()
     bot.set_webhook(url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}")
