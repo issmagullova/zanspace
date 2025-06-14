@@ -1,21 +1,22 @@
+from pathlib import Path
+
+# Создаём Python-скрипт с обновлённой моделью DeepSeek R1 0528
+code = '''
 import os
 import requests
 from flask import Flask, request
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# Переменные окружения
 TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-# Хранилище состояния
 user_lang = {}
 user_role = {}
 
-# Команда /start
 @bot.message_handler(commands=["start"])
 def send_welcome(message):
     markup = InlineKeyboardMarkup(row_width=2)
@@ -25,7 +26,6 @@ def send_welcome(message):
     )
     bot.send_message(message.chat.id, "Тілді таңдаңыз / Выберите язык:", reply_markup=markup)
 
-# Обработка языка
 @bot.callback_query_handler(func=lambda call: call.data.startswith("lang_"))
 def handle_language(call):
     lang = call.data.split("_")[1]
@@ -49,7 +49,6 @@ def handle_language(call):
         )
     bot.edit_message_text(msg, call.message.chat.id, call.message.message_id, reply_markup=markup)
 
-# Обработка роли
 @bot.callback_query_handler(func=lambda call: call.data.startswith("role_"))
 def handle_role(call):
     role = call.data.split("_")[1]
@@ -71,18 +70,35 @@ def handle_role(call):
         elif role == "jury":
             bot.send_message(call.message.chat.id, "⚖️ Мен қатысушыларға қоятын заң сұрақтарын ұсынамын.")
 
-# Генерация промпта
 def generate_prompt(lang, role):
-    if lang == "ru" and role == "creator":
-        return (
-            "Ты — ИИ-юрист, специализирующийся на казахстанском законодательстве. "
-            "Проанализируй стартап, определи возможные юридические риски, пробелы в документации, "
-            "и дай рекомендации. ❗️Важно: это не юридическая консультация, а направляющий анализ. "
-            "Проект: "
-        )
-    return "Помоги с анализом проекта по законодательству Казахстана."
+    if lang == "ru":
+        if role == "creator":
+            return (
+                "Ты — ИИ-юрист. Обрати внимание: этот ответ не является юридической консультацией, а только рекомендацией. "
+                "Оцени проект ниже по законодательству Казахстана, определи риски, пробелы в документах и рекомендации:\n\n"
+            )
+    else:
+        if role == "creator":
+            return (
+                "Сіз — заңгер ретінде әрекет ететін жасанды интеллектсіз. Назар аударыңыз: бұл жауап тек кеңес, заңдық күшке ие емес. "
+                "Қазақстан заңнамасына сәйкес жобаны бағалап, тәуекелдерді анықтаңыз:\n\n"
+            )
+    return "Оцени проект на основе законодательства Казахстана."
 
-# Ответ от OpenRouter
+@bot.message_handler(func=lambda message: True, content_types=["text"])
+def handle_message(message):
+    user_id = message.from_user.id
+    lang = user_lang.get(user_id, "ru")
+    role = user_role.get(user_id)
+
+    if role == "creator":
+        bot.send_message(message.chat.id, "⏳ Проект в обработке, подождите 20–30 секунд...")
+        prompt = generate_prompt(lang, role) + message.text
+        reply = ask_openrouter(prompt)
+        bot.send_message(message.chat.id, reply)
+    else:
+        bot.send_message(message.chat.id, "⚠️ Эта функция сейчас доступна только для создателей проекта.")
+
 def ask_openrouter(prompt):
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -90,7 +106,7 @@ def ask_openrouter(prompt):
         "Content-Type": "application/json"
     }
     data = {
-        "model": "google/gemma-3n-e4b-it:free",
+        "model": "deepseek-ai/deepseek-r1-0528:free",
         "messages": [{"role": "user", "content": prompt}]
     }
 
@@ -101,22 +117,7 @@ def ask_openrouter(prompt):
         return response["choices"][0]["message"]["content"]
     except Exception as e:
         return f"⚠️ Ошибка при подключении к ИИ: {e}"
-# Обработка текста от пользователя
-@bot.message_handler(func=lambda message: True, content_types=["text"])
-def handle_message(message):
-    user_id = message.from_user.id
-    lang = user_lang.get(user_id, "ru")
-    role = user_role.get(user_id)
 
-    if role == "creator" and lang == "ru":
-        bot.send_message(message.chat.id, "⏳ Проект в обработке, подождите 20–30 секунд...")
-        prompt = generate_prompt(lang, role) + "\n\n" + message.text
-        reply = ask_openrouter(prompt)
-        bot.send_message(message.chat.id, reply)
-    else:
-        bot.send_message(message.chat.id, "⚠️ Эта функция сейчас доступна только для создателей проекта на русском языке.")
-
-# Webhook для Render
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     json_str = request.get_data().decode("utf-8")
@@ -124,8 +125,14 @@ def webhook():
     bot.process_new_updates([update])
     return "!", 200
 
-# Запуск Flask
-if __name__ == "__main__":
+if name == "__main__":
     bot.remove_webhook()
     bot.set_webhook(url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}")
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+'''
+
+# Сохраняем файл
+output_path = Path("/mnt/data/main_deepseek.py")
+output_path.write_text(code)
+
+output_path.name
