@@ -1,6 +1,4 @@
-from pathlib import Path
 
-# Создаём Python-скрипт с обновлённой моделью DeepSeek R1 0528
 code = '''
 import os
 import requests
@@ -129,10 +127,3 @@ if __name__ == "__main__":
     bot.remove_webhook()
     bot.set_webhook(url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}")
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-'''
-
-# Сохраняем файл
-output_path = Path("/mnt/data/main_deepseek.py")
-output_path.write_text(code)
-
-output_path.name
