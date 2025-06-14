@@ -11,7 +11,7 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-# Хранилище состояний
+# Хранилище состояния
 user_lang = {}
 user_role = {}
 
@@ -70,24 +70,19 @@ def handle_role(call):
             bot.send_message(call.message.chat.id, "📚 Мен оқыту үшін ҚР кодекстерін түсіндіруге көмектесемін.")
         elif role == "jury":
             bot.send_message(call.message.chat.id, "⚖️ Мен қатысушыларға қоятын заң сұрақтарын ұсынамын.")
-
 # Генерация промпта
 def generate_prompt(lang, role):
-    if lang == "ru":
-        if role == "creator":
-            return (
-                "Ты — ИИ-юрист, который оценивает стартапы с учётом законодательства Казахстана. "
-                "Проанализируй проект ниже и определи юридические риски, возможные пробелы в документации, "
-                "а также дай рекомендации для легализации:"
-            )
-    else:
-        if role == "creator":
-            return (
-                "Сіз — Қазақстан заңнамасын білетін жасанды интеллект заңгерісіз. "
-                "Жобаны төменде талдап, заңды тәуекелдерді анықтаңыз, құжаттардағы кемшіліктерді көрсетіңіз "
-                "және заңдастыру бойынша ұсыныстар беріңіз:"
-            )
-    return "Анализируй проект с учётом законодательства Казахстана."
+    if lang == "ru" and role == "creator":
+        return (
+            "Ты — ИИ-юрист, оценивающий стартапы с учётом законодательства Казахстана. "
+            "ВНИМАНИЕ: твой ответ является лишь направляющим, он не является официальной юридической консультацией. "
+            "Анализируй следующий проект и определи:\n"
+            "- юридические риски;\n"
+            "- пробелы в документации;\n"
+            "- что нужно сделать для легализации в Республике Казахстан.\n"
+            "Проект:"
+        )
+    return "Ответь на основе законодательства Казахстана."
 
 # Обработка текстов
 @bot.message_handler(func=lambda message: True, content_types=["text"])
@@ -97,29 +92,30 @@ def handle_message(message):
     role = user_role.get(user_id)
 
     if role == "creator":
-        bot.send_message(message.chat.id, '⏳ Проект в обработке, подождите 20–30 секунд...')
+        bot.send_message(message.chat.id, "⏳ Проект в обработке, подождите 20–30 секунд...")
+
         prompt = generate_prompt(lang, role) + "\n\n" + message.text
         reply = ask_openrouter(prompt)
         bot.send_message(message.chat.id, reply)
     else:
         bot.send_message(message.chat.id, "⚠️ Эта функция сейчас доступна только для создателей проекта.")
 
-# Запрос в OpenRouter (модель Mistral)
+# Запрос в OpenRouter с моделью Google Gemma
 def ask_openrouter(prompt):
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "HTTP-Referer": "https://openrouter.ai",
+        "HTTP-Referer": "https://openrouter.ai",  # обязателен
         "Content-Type": "application/json"
     }
     data = {
-        "model": "mistralai/mistral-7b-instruct",
+        "model": "google/gemma-3n-e4b-it:free",
         "messages": [{"role": "user", "content": prompt}]
     }
 
     try:
         r = requests.post("https://openrouter.ai/api/v1/chat/completions", json=data, headers=headers)
         response = r.json()
-        print("DEBUG:", response)
+        print("DEBUG:", response)  # для отладки
         return response["choices"][0]["message"]["content"]
     except Exception as e:
         return f"⚠️ Ошибка при подключении к ИИ: {e}"
@@ -132,7 +128,7 @@ def webhook():
     bot.process_new_updates([update])
     return "!", 200
 
-# Запуск Flask
+# Запуск Flask на Render
 if __name__ == "__main__":
     bot.remove_webhook()
     bot.set_webhook(url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}")
